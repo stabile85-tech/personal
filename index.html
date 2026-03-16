@@ -20,6 +20,34 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .hdr-icon-btn{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#94a3b8;width:34px;height:34px;border-radius:8px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .18s;flex-shrink:0;padding:0}
 .hdr-icon-btn:hover{background:rgba(255,255,255,.16);color:#fff}
 
+/* ── GITHUB SYNC PANEL ── */
+.gh-panel-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:400;display:flex;align-items:flex-start;justify-content:flex-end;padding:72px 20px 0;opacity:0;pointer-events:none;transition:opacity .2s}
+.gh-panel-bg.open{opacity:1;pointer-events:all}
+.gh-panel{background:#fff;border-radius:16px;padding:26px 24px;width:360px;max-width:94vw;box-shadow:0 20px 60px rgba(0,0,0,.2);transform:translateY(-8px);transition:transform .2s}
+.gh-panel-bg.open .gh-panel{transform:translateY(0)}
+.gh-panel h3{font-size:16px;font-weight:800;color:#0f172a;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.gh-panel p{font-size:12px;color:#64748b;margin-bottom:16px}
+.gh-field{margin-bottom:12px}
+.gh-field label{display:block;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
+.gh-field input{width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:9px 12px;font-size:13px;outline:none;transition:border-color .15s}
+.gh-field input:focus{border-color:#3b82f6}
+.gh-status{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;font-size:12px;font-weight:600;margin-bottom:14px}
+.gh-status.ok{background:#dcfce7;color:#166534}
+.gh-status.warn{background:#fef3c7;color:#92400e}
+.gh-status.err{background:#fee2e2;color:#991b1b}
+.gh-status.idle{background:#f1f5f9;color:#475569}
+.gh-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px}
+.gh-btn{padding:10px;border-radius:8px;border:none;font-size:12px;font-weight:700;cursor:pointer;transition:all .15s}
+.gh-btn.pull{background:#dbeafe;color:#1d4ed8}.gh-btn.pull:hover{background:#bfdbfe}
+.gh-btn.push{background:#dcfce7;color:#166534}.gh-btn.push:hover{background:#bbf7d0}
+.gh-btn.save{background:#0f172a;color:#fff;grid-column:1/-1}.gh-btn.save:hover{background:#1e293b}
+.gh-sync-dot{width:8px;height:8px;border-radius:50%;background:#94a3b8;flex-shrink:0}
+.gh-sync-dot.ok{background:#22c55e}
+.gh-sync-dot.err{background:#ef4444}
+.hdr-gh-btn{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#94a3b8;padding:5px 11px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all .18s;white-space:nowrap}
+.hdr-gh-btn:hover{background:rgba(255,255,255,.16);color:#e2e8f0}
+.hdr-gh-btn.synced{color:#4ade80;border-color:rgba(74,222,128,.4)}
+
 /* ── PRIVACY TOGGLE ── */
 .privacy-btn{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#94a3b8;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all .18s;white-space:nowrap}
 .privacy-btn:hover{background:rgba(255,255,255,.16);color:#e2e8f0}
@@ -318,6 +346,7 @@ tr:hover td{background:#fafbfc}
 <header class="header">
   <div class="logo">📈 <em>Invest</em>Track</div>
   <div class="header-meta">
+    <button class="hdr-gh-btn" id="gh-hdr-btn" onclick="openGHPanel()" title="Sincronização com GitHub">☁️ <span id="gh-hdr-label">GitHub</span></button>
     <button class="hdr-icon-btn" onclick="exportBackup()" title="Exportar backup completo (dados + anexos)">💾</button>
     <label  class="hdr-icon-btn" title="Importar backup" style="cursor:pointer">📂<input type="file" accept=".json" style="display:none" onchange="importBackup(this.files[0]);this.value=''"></label>
     <button class="privacy-btn" id="privacy-btn" onclick="togglePrivacy()" title="Mostrar/ocultar todos os valores">👁 Mostrar</button>
@@ -570,6 +599,32 @@ tr:hover td{background:#fafbfc}
   </div><!-- /view-iliq -->
 
 </main>
+
+<!-- ── GITHUB PANEL ── -->
+<div class="gh-panel-bg" id="gh-panel-bg" onclick="closeGHPanel(event)">
+  <div class="gh-panel">
+    <h3>☁️ GitHub Sync</h3>
+    <p>Seus dados ficam em <code>investtrack-data.json</code> no repositório e são acessíveis de qualquer computador.</p>
+    <div id="gh-status" class="gh-status idle"><span class="gh-sync-dot" id="gh-dot"></span><span id="gh-status-txt">Não configurado</span></div>
+    <div class="gh-field">
+      <label>Personal Access Token</label>
+      <input type="password" id="gh-token" placeholder="ghp_xxxxxxxxxxxx" oninput="ghFieldChange()">
+    </div>
+    <div class="gh-field">
+      <label>Usuário / Organização</label>
+      <input type="text" id="gh-owner" placeholder="seu-usuario-github" oninput="ghFieldChange()">
+    </div>
+    <div class="gh-field">
+      <label>Nome do Repositório</label>
+      <input type="text" id="gh-repo" placeholder="investtrack" oninput="ghFieldChange()">
+    </div>
+    <div class="gh-actions">
+      <button class="gh-btn pull" onclick="syncFromGH()">⬇ Baixar do GitHub</button>
+      <button class="gh-btn push" onclick="syncToGH()">⬆ Salvar no GitHub</button>
+      <button class="gh-btn save" onclick="saveGHConfig()">💾 Salvar configuração</button>
+    </div>
+  </div>
+</div>
 
 <!-- ── MODAL ── -->
 <div class="modal-bg" id="modal-bg" onclick="closeModal(event)">
@@ -1659,6 +1714,138 @@ function exportCSV(){
 }
 
 /* ═══════════════════════════════════════════════════════════
+   GITHUB SYNC
+═══════════════════════════════════════════════════════════ */
+const GH_SK = 'investtrack_gh_v1';
+let _ghSha  = null; // SHA do arquivo atual no GitHub
+
+function loadGH(){ const d=localStorage.getItem(GH_SK); return d?JSON.parse(d):{token:'',owner:'',repo:''}; }
+function saveGH(c){ localStorage.setItem(GH_SK,JSON.stringify(c)); }
+
+/* UTF-8-safe base64 */
+function b64enc(str){ const b=new TextEncoder().encode(str); let s=''; b.forEach(x=>s+=String.fromCharCode(x)); return btoa(s); }
+function b64dec(b64){ const s=atob(b64.replace(/\n/g,'')); const b=new Uint8Array(s.length); for(let i=0;i<s.length;i++)b[i]=s.charCodeAt(i); return new TextDecoder().decode(b); }
+
+function ghHeaders(token){ return {'Authorization':`token ${token}`,'Content-Type':'application/json','Accept':'application/vnd.github.v3+json'}; }
+
+function ghSetStatus(msg, type='idle'){
+  const el=document.getElementById('gh-status');
+  const dot=document.getElementById('gh-dot');
+  const txt=document.getElementById('gh-status-txt');
+  if(!el) return;
+  el.className=`gh-status ${type}`;
+  dot.className=`gh-sync-dot ${type==='ok'?'ok':type==='err'?'err':''}`;
+  txt.textContent=msg;
+}
+
+function updateGHBtn(){
+  const cfg=loadGH();
+  const btn=document.getElementById('gh-hdr-btn');
+  const lbl=document.getElementById('gh-hdr-label');
+  if(!btn) return;
+  if(cfg.token&&cfg.owner&&cfg.repo){
+    btn.classList.add('synced');
+    lbl.textContent=`${cfg.owner}/${cfg.repo}`;
+  } else {
+    btn.classList.remove('synced');
+    lbl.textContent='GitHub';
+  }
+}
+
+function openGHPanel(){
+  const cfg=loadGH();
+  document.getElementById('gh-token').value=cfg.token||'';
+  document.getElementById('gh-owner').value=cfg.owner||'';
+  document.getElementById('gh-repo').value=cfg.repo||'';
+  if(cfg.token&&cfg.owner&&cfg.repo) ghSetStatus(`Conectado a ${cfg.owner}/${cfg.repo}`,'ok');
+  else ghSetStatus('Preencha os campos abaixo para conectar','idle');
+  document.getElementById('gh-panel-bg').classList.add('open');
+}
+function closeGHPanel(e){ if(e&&e.target!==document.getElementById('gh-panel-bg'))return; document.getElementById('gh-panel-bg').classList.remove('open'); }
+function ghFieldChange(){ ghSetStatus('Campos alterados — salve a configuração','warn'); }
+
+function saveGHConfig(){
+  const cfg={
+    token:document.getElementById('gh-token').value.trim(),
+    owner:document.getElementById('gh-owner').value.trim(),
+    repo: document.getElementById('gh-repo').value.trim(),
+  };
+  if(!cfg.token||!cfg.owner||!cfg.repo){ ghSetStatus('Preencha todos os campos','err'); return; }
+  saveGH(cfg);
+  ghSetStatus(`Conectado a ${cfg.owner}/${cfg.repo}`,'ok');
+  updateGHBtn();
+  toast('Configuração salva!','ok');
+}
+
+async function syncFromGH(silent=false){
+  const cfg=loadGH();
+  if(!cfg.token||!cfg.owner||!cfg.repo){ if(!silent) ghSetStatus('Configure o GitHub primeiro','err'); return; }
+  if(!silent){ ghSetStatus('Baixando dados do GitHub…','warn'); toast('Sincronizando…'); }
+  try{
+    const r=await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/investtrack-data.json`,{headers:ghHeaders(cfg.token)});
+    if(r.status===404){
+      ghSetStatus('Nenhum dado salvo no GitHub ainda','warn');
+      if(!silent) toast('Repositório sem dados ainda — faça o primeiro envio','ok');
+      return;
+    }
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j=await r.json();
+    _ghSha=j.sha;
+    const data=JSON.parse(b64dec(j.content));
+    const savedAt=data.savedAt?new Date(data.savedAt).toLocaleString('pt-BR'):'desconhecido';
+    if(!silent){
+      if(!confirm(`Substituir dados locais pelos do GitHub?\nSalvo em: ${savedAt}`)) return;
+    }
+    Object.entries(data.ls||{}).forEach(([k,v])=>{ if(v!==null&&v!==undefined) localStorage.setItem(k,v); });
+    ghSetStatus(`Dados de ${savedAt} aplicados`,'ok');
+    toast('Dados importados do GitHub! Recarregando…','ok');
+    setTimeout(()=>location.reload(),1600);
+  } catch(e){
+    ghSetStatus(`Erro: ${e.message}`,'err');
+    if(!silent) toast(`Erro GitHub: ${e.message}`,'err');
+  }
+}
+
+async function syncToGH(){
+  const cfg=loadGH();
+  if(!cfg.token||!cfg.owner||!cfg.repo){ ghSetStatus('Configure o GitHub primeiro','err'); openGHPanel(); return; }
+  ghSetStatus('Enviando para o GitHub…','warn');
+  toast('Salvando no GitHub…');
+  const data={
+    version:2,
+    savedAt:new Date().toISOString(),
+    ls:{
+      [SK]:    localStorage.getItem(SK),
+      [IL_SK]: localStorage.getItem(IL_SK),
+      [CDI_SK]:localStorage.getItem(CDI_SK),
+    }
+  };
+  const content=b64enc(JSON.stringify(data,null,2));
+  // Busca SHA atual se não tiver
+  if(!_ghSha){
+    try{
+      const r=await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/investtrack-data.json`,{headers:ghHeaders(cfg.token)});
+      if(r.ok){ const j=await r.json(); _ghSha=j.sha; }
+    } catch(e){}
+  }
+  const body={message:`sync: ${new Date().toISOString().slice(0,16).replace('T',' ')}`,content};
+  if(_ghSha) body.sha=_ghSha;
+  try{
+    const r=await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/investtrack-data.json`,{method:'PUT',headers:ghHeaders(cfg.token),body:JSON.stringify(body)});
+    if(!r.ok){ const e=await r.json(); throw new Error(e.message||`HTTP ${r.status}`); }
+    const j=await r.json();
+    _ghSha=j.content.sha;
+    const ts=new Date().toLocaleString('pt-BR');
+    ghSetStatus(`Salvo em ${ts}`,'ok');
+    updateGHBtn();
+    toast('Dados salvos no GitHub!','ok');
+  } catch(e){
+    ghSetStatus(`Erro: ${e.message}`,'err');
+    toast(`Erro: ${e.message}`,'err');
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
    BACKUP — exportar / importar
 ═══════════════════════════════════════════════════════════ */
 async function exportBackup(){
@@ -1764,6 +1951,7 @@ function toast(msg,type='ok'){
 ═══════════════════════════════════════════════════════════ */
 renderDashboard();
 updatePrivacyBtn();
+updateGHBtn();
 </script>
 </body>
 </html>
