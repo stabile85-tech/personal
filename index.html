@@ -604,24 +604,16 @@ tr:hover td{background:#fafbfc}
 <div class="gh-panel-bg" id="gh-panel-bg" onclick="closeGHPanel(event)">
   <div class="gh-panel">
     <h3>☁️ GitHub Sync</h3>
-    <p>Seus dados ficam em <code>investtrack-data.json</code> no repositório e são acessíveis de qualquer computador.</p>
+    <p>Dados salvos automaticamente em <code>stabile85-tech/personal</code>. Configure o token uma vez e pronto.</p>
     <div id="gh-status" class="gh-status idle"><span class="gh-sync-dot" id="gh-dot"></span><span id="gh-status-txt">Não configurado</span></div>
     <div class="gh-field">
       <label>Personal Access Token</label>
       <input type="password" id="gh-token" placeholder="ghp_xxxxxxxxxxxx" oninput="ghFieldChange()">
     </div>
-    <div class="gh-field">
-      <label>Usuário / Organização</label>
-      <input type="text" id="gh-owner" placeholder="seu-usuario-github" oninput="ghFieldChange()">
-    </div>
-    <div class="gh-field">
-      <label>Nome do Repositório</label>
-      <input type="text" id="gh-repo" placeholder="investtrack" oninput="ghFieldChange()">
-    </div>
     <div class="gh-actions">
       <button class="gh-btn pull" onclick="syncFromGH()">⬇ Baixar do GitHub</button>
-      <button class="gh-btn push" onclick="syncToGH()">⬆ Salvar no GitHub</button>
-      <button class="gh-btn save" onclick="saveGHConfig()">💾 Salvar configuração</button>
+      <button class="gh-btn push" onclick="syncToGH()">⬆ Salvar agora</button>
+      <button class="gh-btn save" onclick="saveGHConfig()">💾 Salvar token</button>
     </div>
   </div>
 </div>
@@ -718,7 +710,7 @@ function updatePrivacyBtn(){
 const uid = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36);
 
 function load()  { const d=localStorage.getItem(SK);  return d?JSON.parse(d):null; }
-function save(e) { localStorage.setItem(SK,JSON.stringify(e)); }
+function save(e) { localStorage.setItem(SK,JSON.stringify(e)); scheduleAutoSync(); }
 function sorted(entries){ return [...entries].sort((a,b)=>a.date.localeCompare(b.date)); }
 function total(e){ return ASSETS.reduce((s,a)=>s+(+e[a.k]||0),0); }
 
@@ -756,9 +748,9 @@ function durLabel(days){
    ILÍQUIDOS — STORAGE & CDI
 ═══════════════════════════════════════════════════════════ */
 function loadIlik(){ const d=localStorage.getItem(IL_SK); return d?JSON.parse(d):[]; }
-function saveIlik(arr){ localStorage.setItem(IL_SK,JSON.stringify(arr)); }
+function saveIlik(arr){ localStorage.setItem(IL_SK,JSON.stringify(arr)); scheduleAutoSync(); }
 function loadCDI(){ return parseFloat(localStorage.getItem(CDI_SK))||14.75; }
-function saveCDI(v){ if(+v>0&&+v<100) localStorage.setItem(CDI_SK,v); }
+function saveCDI(v){ if(+v>0&&+v<100){ localStorage.setItem(CDI_SK,v); scheduleAutoSync(); } }
 
 /* ── Historical CDI/SELIC rates (annual %, sorted ascending by effective date) ── */
 const CDI_HIST=[
@@ -1716,11 +1708,25 @@ function exportCSV(){
 /* ═══════════════════════════════════════════════════════════
    GITHUB SYNC
 ═══════════════════════════════════════════════════════════ */
-const GH_SK = 'investtrack_gh_v1';
+const GH_SK      = 'investtrack_gh_v1';
+const GH_TS_SK   = 'investtrack_gh_ts'; // ISO timestamp do último sync
+const GH_OWNER   = 'stabile85-tech';
+const GH_REPO    = 'personal';
 let _ghSha  = null; // SHA do arquivo atual no GitHub
+let _ghAutoTimer = null;
 
-function loadGH(){ const d=localStorage.getItem(GH_SK); return d?JSON.parse(d):{token:'',owner:'',repo:''}; }
+function loadGH(){
+  const d=localStorage.getItem(GH_SK);
+  const saved=d?JSON.parse(d):{};
+  return { token:saved.token||'', owner:GH_OWNER, repo:GH_REPO };
+}
 function saveGH(c){ localStorage.setItem(GH_SK,JSON.stringify(c)); }
+
+/* Auto-sync com debounce de 4s — disparado após cada save de dados */
+function scheduleAutoSync(){
+  if(_ghAutoTimer) clearTimeout(_ghAutoTimer);
+  _ghAutoTimer=setTimeout(()=>{ syncToGH(true); },4000);
+}
 
 /* UTF-8-safe base64 */
 function b64enc(str){ const b=new TextEncoder().encode(str); let s=''; b.forEach(x=>s+=String.fromCharCode(x)); return btoa(s); }
@@ -1743,9 +1749,9 @@ function updateGHBtn(){
   const btn=document.getElementById('gh-hdr-btn');
   const lbl=document.getElementById('gh-hdr-label');
   if(!btn) return;
-  if(cfg.token&&cfg.owner&&cfg.repo){
+  if(cfg.token){
     btn.classList.add('synced');
-    lbl.textContent=`${cfg.owner}/${cfg.repo}`;
+    lbl.textContent=`${GH_OWNER}/${GH_REPO}`;
   } else {
     btn.classList.remove('synced');
     lbl.textContent='GitHub';
@@ -1755,65 +1761,72 @@ function updateGHBtn(){
 function openGHPanel(){
   const cfg=loadGH();
   document.getElementById('gh-token').value=cfg.token||'';
-  document.getElementById('gh-owner').value=cfg.owner||'';
-  document.getElementById('gh-repo').value=cfg.repo||'';
-  if(cfg.token&&cfg.owner&&cfg.repo) ghSetStatus(`Conectado a ${cfg.owner}/${cfg.repo}`,'ok');
-  else ghSetStatus('Preencha os campos abaixo para conectar','idle');
+  if(cfg.token) ghSetStatus(`Conectado a ${GH_OWNER}/${GH_REPO}`,'ok');
+  else ghSetStatus('Cole seu Personal Access Token do GitHub','idle');
   document.getElementById('gh-panel-bg').classList.add('open');
 }
 function closeGHPanel(e){ if(e&&e.target!==document.getElementById('gh-panel-bg'))return; document.getElementById('gh-panel-bg').classList.remove('open'); }
-function ghFieldChange(){ ghSetStatus('Campos alterados — salve a configuração','warn'); }
+function ghFieldChange(){ ghSetStatus('Token alterado — salve para confirmar','warn'); }
 
 function saveGHConfig(){
-  const cfg={
-    token:document.getElementById('gh-token').value.trim(),
-    owner:document.getElementById('gh-owner').value.trim(),
-    repo: document.getElementById('gh-repo').value.trim(),
-  };
-  if(!cfg.token||!cfg.owner||!cfg.repo){ ghSetStatus('Preencha todos os campos','err'); return; }
-  saveGH(cfg);
-  ghSetStatus(`Conectado a ${cfg.owner}/${cfg.repo}`,'ok');
+  const token=document.getElementById('gh-token').value.trim();
+  if(!token){ ghSetStatus('Cole o Personal Access Token','err'); return; }
+  saveGH({token, owner:GH_OWNER, repo:GH_REPO});
+  ghSetStatus(`Conectado a ${GH_OWNER}/${GH_REPO}`,'ok');
   updateGHBtn();
-  toast('Configuração salva!','ok');
+  toast('Token salvo! Sincronizando…','ok');
+  syncToGH(false);
 }
 
 async function syncFromGH(silent=false){
   const cfg=loadGH();
-  if(!cfg.token||!cfg.owner||!cfg.repo){ if(!silent) ghSetStatus('Configure o GitHub primeiro','err'); return; }
+  if(!cfg.token||!cfg.owner||!cfg.repo){ if(!silent) ghSetStatus('Configure o token do GitHub','err'); return; }
   if(!silent){ ghSetStatus('Baixando dados do GitHub…','warn'); toast('Sincronizando…'); }
   try{
     const r=await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/investtrack-data.json`,{headers:ghHeaders(cfg.token)});
     if(r.status===404){
-      ghSetStatus('Nenhum dado salvo no GitHub ainda','warn');
-      if(!silent) toast('Repositório sem dados ainda — faça o primeiro envio','ok');
+      if(!silent){ ghSetStatus('Nenhum dado no GitHub ainda — faça o primeiro envio','warn'); toast('Sem dados no GitHub ainda','ok'); }
       return;
     }
     if(!r.ok) throw new Error(`HTTP ${r.status}`);
     const j=await r.json();
     _ghSha=j.sha;
     const data=JSON.parse(b64dec(j.content));
-    const savedAt=data.savedAt?new Date(data.savedAt).toLocaleString('pt-BR'):'desconhecido';
-    if(!silent){
-      if(!confirm(`Substituir dados locais pelos do GitHub?\nSalvo em: ${savedAt}`)) return;
+    const ghTs=data.savedAt||'';
+    const localTs=localStorage.getItem(GH_TS_SK)||'';
+    if(silent){
+      // Auto-pull: aplica somente se GH tiver dados mais novos que o local
+      if(ghTs && localTs && localTs>=ghTs) return; // local já está atualizado
+      Object.entries(data.ls||{}).forEach(([k,v])=>{ if(v!==null&&v!==undefined) localStorage.setItem(k,v); });
+      localStorage.setItem(GH_TS_SK, ghTs||new Date().toISOString());
+      toast('Dados atualizados do GitHub! Recarregando…','ok');
+      setTimeout(()=>location.reload(),1800);
+      return;
     }
+    // Pull manual — pede confirmação
+    const savedAt=ghTs?new Date(ghTs).toLocaleString('pt-BR'):'desconhecido';
+    if(!confirm(`Substituir dados locais pelos do GitHub?\nSalvo em: ${savedAt}`)) return;
     Object.entries(data.ls||{}).forEach(([k,v])=>{ if(v!==null&&v!==undefined) localStorage.setItem(k,v); });
+    localStorage.setItem(GH_TS_SK, ghTs||new Date().toISOString());
     ghSetStatus(`Dados de ${savedAt} aplicados`,'ok');
     toast('Dados importados do GitHub! Recarregando…','ok');
     setTimeout(()=>location.reload(),1600);
   } catch(e){
-    ghSetStatus(`Erro: ${e.message}`,'err');
-    if(!silent) toast(`Erro GitHub: ${e.message}`,'err');
+    if(!silent){ ghSetStatus(`Erro: ${e.message}`,'err'); toast(`Erro GitHub: ${e.message}`,'err'); }
   }
 }
 
-async function syncToGH(){
+async function syncToGH(silent=false){
   const cfg=loadGH();
-  if(!cfg.token||!cfg.owner||!cfg.repo){ ghSetStatus('Configure o GitHub primeiro','err'); openGHPanel(); return; }
-  ghSetStatus('Enviando para o GitHub…','warn');
-  toast('Salvando no GitHub…');
+  if(!cfg.token||!cfg.owner||!cfg.repo){
+    if(!silent){ ghSetStatus('Configure o token do GitHub','err'); openGHPanel(); }
+    return;
+  }
+  if(!silent){ ghSetStatus('Enviando para o GitHub…','warn'); toast('Salvando no GitHub…'); }
+  const now=new Date().toISOString();
   const data={
     version:2,
-    savedAt:new Date().toISOString(),
+    savedAt:now,
     ls:{
       [SK]:    localStorage.getItem(SK),
       [IL_SK]: localStorage.getItem(IL_SK),
@@ -1828,20 +1841,23 @@ async function syncToGH(){
       if(r.ok){ const j=await r.json(); _ghSha=j.sha; }
     } catch(e){}
   }
-  const body={message:`sync: ${new Date().toISOString().slice(0,16).replace('T',' ')}`,content};
+  const body={message:`sync: ${now.slice(0,16).replace('T',' ')}`,content};
   if(_ghSha) body.sha=_ghSha;
   try{
     const r=await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/investtrack-data.json`,{method:'PUT',headers:ghHeaders(cfg.token),body:JSON.stringify(body)});
     if(!r.ok){ const e=await r.json(); throw new Error(e.message||`HTTP ${r.status}`); }
     const j=await r.json();
     _ghSha=j.content.sha;
-    const ts=new Date().toLocaleString('pt-BR');
-    ghSetStatus(`Salvo em ${ts}`,'ok');
-    updateGHBtn();
-    toast('Dados salvos no GitHub!','ok');
+    localStorage.setItem(GH_TS_SK, now);
+    if(!silent){
+      ghSetStatus(`Salvo em ${new Date(now).toLocaleString('pt-BR')}`,'ok');
+      updateGHBtn();
+      toast('Dados salvos no GitHub!','ok');
+    } else {
+      updateGHBtn();
+    }
   } catch(e){
-    ghSetStatus(`Erro: ${e.message}`,'err');
-    toast(`Erro: ${e.message}`,'err');
+    if(!silent){ ghSetStatus(`Erro: ${e.message}`,'err'); toast(`Erro: ${e.message}`,'err'); }
   }
 }
 
@@ -1952,6 +1968,8 @@ function toast(msg,type='ok'){
 renderDashboard();
 updatePrivacyBtn();
 updateGHBtn();
+// Auto-pull silencioso ao iniciar — aplica dados do GitHub se forem mais recentes
+syncFromGH(true);
 </script>
 </body>
 </html>
