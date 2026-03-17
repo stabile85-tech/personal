@@ -1718,7 +1718,7 @@ let _ghAutoTimer = null;
 function loadGH(){
   const d=localStorage.getItem(GH_SK);
   const saved=d?JSON.parse(d):{};
-  return { token:saved.token||'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', owner:GH_OWNER, repo:GH_REPO };
+  return { token:saved.token||'', owner:GH_OWNER, repo:GH_REPO };
 }
 function saveGH(c){ localStorage.setItem(GH_SK,JSON.stringify(c)); }
 
