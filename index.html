@@ -1722,10 +1722,10 @@ function loadGH(){
 }
 function saveGH(c){ localStorage.setItem(GH_SK,JSON.stringify(c)); }
 
-/* Auto-sync com debounce de 4s — disparado após cada save de dados */
+/* Auto-sync com debounce de 1s — disparado após cada save de dados */
 function scheduleAutoSync(){
   if(_ghAutoTimer) clearTimeout(_ghAutoTimer);
-  _ghAutoTimer=setTimeout(()=>{ syncToGH(true); },4000);
+  _ghAutoTimer=setTimeout(()=>{ syncToGH(true); },1000);
 }
 
 /* UTF-8-safe base64 */
@@ -1970,6 +1970,10 @@ updatePrivacyBtn();
 updateGHBtn();
 // Auto-pull silencioso ao iniciar — aplica dados do GitHub se forem mais recentes
 syncFromGH(true);
+
+// Sincroniza automaticamente ao fechar aba, trocar de aba ou minimizar o browser
+document.addEventListener('visibilitychange', ()=>{ if(document.hidden) syncToGH(true); });
+window.addEventListener('pagehide', ()=>{ syncToGH(true); });
 </script>
 </body>
 </html>
