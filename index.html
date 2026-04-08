@@ -339,9 +339,34 @@ tr:hover td{background:#fafbfc}
   .mov-col-labels{display:none}
   .mov-row{grid-template-columns:1fr 36px}
 }
+
+/* ── LOCK SCREEN ── */
+#lock-screen{position:fixed;inset:0;background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);display:flex;align-items:center;justify-content:center;z-index:9999}
+.lock-card{background:#fff;border-radius:20px;padding:40px 36px;width:360px;max-width:92vw;box-shadow:0 24px 80px rgba(0,0,0,.5);text-align:center}
+.lock-logo{font-size:22px;font-weight:800;color:#0f172a;margin-bottom:6px}
+.lock-logo em{color:#60a5fa;font-style:normal}
+.lock-sub{font-size:13px;color:#64748b;margin-bottom:28px}
+.lock-icon{font-size:44px;margin-bottom:16px}
+.lock-input{width:100%;border:1.5px solid #e2e8f0;border-radius:10px;padding:12px 16px;font-size:15px;outline:none;text-align:center;letter-spacing:2px;margin-bottom:14px;transition:border-color .15s}
+.lock-input:focus{border-color:#3b82f6}
+.lock-btn{width:100%;background:#0f172a;color:#fff;border:none;border-radius:10px;padding:13px;font-size:15px;font-weight:700;cursor:pointer;transition:background .15s}
+.lock-btn:hover{background:#1e293b}
+.lock-err{font-size:12px;color:#ef4444;min-height:18px;margin-top:10px}
 </style>
 </head>
 <body>
+
+<!-- ── TELA DE BLOQUEIO ── -->
+<div id="lock-screen">
+  <div class="lock-card">
+    <div class="lock-icon">🔒</div>
+    <div class="lock-logo">Invest<em>Track</em></div>
+    <div class="lock-sub">Digite sua senha para acessar</div>
+    <input type="password" id="lock-pwd" class="lock-input" placeholder="Senha" autocomplete="current-password" onkeydown="if(event.key==='Enter')unlockApp()">
+    <button class="lock-btn" onclick="unlockApp()">Entrar</button>
+    <div class="lock-err" id="lock-err"></div>
+  </div>
+</div>
 
 <header class="header">
   <div class="logo">📈 <em>Invest</em>Track</div>
@@ -702,6 +727,70 @@ function updatePrivacyBtn(){
     btn.innerHTML = '🙈 Ocultar';
     btn.classList.add('showing');
   }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CRYPTO — AES-GCM 256 + PBKDF2
+═══════════════════════════════════════════════════════════ */
+const PWD_SALT_SK = 'investtrack_salt_v1';
+const PWD_VFY_SK  = 'investtrack_vpw_v1';
+let _sessionKey   = null; // CryptoKey ativo na sessão
+
+async function _getOrCreateSalt(){
+  let b64 = localStorage.getItem(PWD_SALT_SK);
+  if(!b64){
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    b64 = btoa(String.fromCharCode(...salt));
+    localStorage.setItem(PWD_SALT_SK, b64);
+  }
+  return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+}
+
+async function _deriveKey(password, salt){
+  const keyMat = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name:'PBKDF2', salt, iterations:200000, hash:'SHA-256' },
+    keyMat,
+    { name:'AES-GCM', length:256 },
+    false,
+    ['encrypt','decrypt']
+  );
+}
+
+async function _aesEncrypt(key, plaintext){
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name:'AES-GCM', iv }, key, new TextEncoder().encode(plaintext));
+  const combined = new Uint8Array(12 + ct.byteLength);
+  combined.set(iv, 0); combined.set(new Uint8Array(ct), 12);
+  return btoa(String.fromCharCode(...combined));
+}
+
+async function _aesDecrypt(key, b64){
+  const combined = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  const pt = await crypto.subtle.decrypt({ name:'AES-GCM', iv:combined.slice(0,12) }, key, combined.slice(12));
+  return new TextDecoder().decode(pt);
+}
+
+async function unlockApp(){
+  const pwd   = document.getElementById('lock-pwd').value;
+  const errEl = document.getElementById('lock-err');
+  if(!pwd){ errEl.textContent='Digite a senha'; return; }
+  errEl.textContent = '';
+  try{
+    const salt   = await _getOrCreateSalt();
+    const key    = await _deriveKey(pwd, salt);
+    const stored = localStorage.getItem(PWD_VFY_SK);
+    if(!stored){
+      // Primeiro uso — registra o verificador criptografado
+      localStorage.setItem(PWD_VFY_SK, await _aesEncrypt(key, 'investtrack-verified'));
+    } else {
+      const result = await _aesDecrypt(key, stored).catch(()=>null);
+      if(result !== 'investtrack-verified'){ errEl.textContent='Senha incorreta'; return; }
+    }
+    _sessionKey = key;
+    document.getElementById('lock-screen').style.display = 'none';
+    _initApp();
+  } catch(e){ errEl.textContent='Senha incorreta'; }
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1791,7 +1880,14 @@ async function syncFromGH(silent=false){
     if(!r.ok) throw new Error(`HTTP ${r.status}`);
     const j=await r.json();
     _ghSha=j.sha;
-    const data=JSON.parse(b64dec(j.content));
+    const raw=b64dec(j.content);
+    const parsed=JSON.parse(raw);
+    let data;
+    if(parsed.encrypted && _sessionKey){
+      data=JSON.parse(await _aesDecrypt(_sessionKey, parsed.ct));
+    } else {
+      data=parsed;
+    }
     const ghTs=data.savedAt||'';
     const localTs=localStorage.getItem(GH_TS_SK)||'';
     if(silent){
@@ -1833,7 +1929,9 @@ async function syncToGH(silent=false){
       [CDI_SK]:localStorage.getItem(CDI_SK),
     }
   };
-  const content=b64enc(JSON.stringify(data,null,2));
+  let payload=JSON.stringify(data,null,2);
+  if(_sessionKey){ payload=JSON.stringify({encrypted:true, ct: await _aesEncrypt(_sessionKey, payload)}); }
+  const content=b64enc(payload);
   // Busca SHA atual se não tiver
   if(!_ghSha){
     try{
@@ -1965,15 +2063,19 @@ function toast(msg,type='ok'){
 /* ═══════════════════════════════════════════════════════════
    INIT
 ═══════════════════════════════════════════════════════════ */
-renderDashboard();
-updatePrivacyBtn();
-updateGHBtn();
-// Auto-pull silencioso ao iniciar — aplica dados do GitHub se forem mais recentes
-syncFromGH(true);
+function _initApp(){
+  renderDashboard();
+  updatePrivacyBtn();
+  updateGHBtn();
+  // Auto-pull silencioso ao iniciar — aplica dados do GitHub se forem mais recentes
+  syncFromGH(true);
+  // Sincroniza ao fechar aba, trocar de aba ou minimizar
+  document.addEventListener('visibilitychange', ()=>{ if(document.hidden) syncToGH(true); });
+  window.addEventListener('pagehide', ()=>{ syncToGH(true); });
+}
 
-// Sincroniza automaticamente ao fechar aba, trocar de aba ou minimizar o browser
-document.addEventListener('visibilitychange', ()=>{ if(document.hidden) syncToGH(true); });
-window.addEventListener('pagehide', ()=>{ syncToGH(true); });
+// Foca no campo de senha ao carregar
+window.addEventListener('load', ()=>{ document.getElementById('lock-pwd').focus(); });
 </script>
 </body>
 </html>
